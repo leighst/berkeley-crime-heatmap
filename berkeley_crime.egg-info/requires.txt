@@ -1,0 +1,7 @@
+geopy
+pandas
+certifi
+
+[dev]
+dagster-webserver
+pytest

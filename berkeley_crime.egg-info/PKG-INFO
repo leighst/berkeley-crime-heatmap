@@ -1,0 +1,9 @@
+Metadata-Version: 2.1
+Name: berkeley_crime
+Version: 0.1.0
+Requires-Dist: geopy
+Requires-Dist: pandas
+Requires-Dist: certifi
+Provides-Extra: dev
+Requires-Dist: dagster-webserver; extra == "dev"
+Requires-Dist: pytest; extra == "dev"

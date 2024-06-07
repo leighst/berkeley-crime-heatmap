@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.dagster]
+module_name = "berkeley_crime"
+
+[project]
+name = "berkeley_crime"
+version = "0.1.0"
+dependencies = [
+  "geopy",
+  "pandas",
+  "certifi",
+]

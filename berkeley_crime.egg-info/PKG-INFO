@@ -4,6 +4,8 @@ Version: 0.1.0
 Requires-Dist: geopy
 Requires-Dist: pandas
 Requires-Dist: certifi
+Requires-Dist: tenacity
+Requires-Dist: requests
 Provides-Extra: dev
 Requires-Dist: dagster-webserver; extra == "dev"
 Requires-Dist: pytest; extra == "dev"

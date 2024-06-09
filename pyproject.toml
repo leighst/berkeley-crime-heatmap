@@ -12,4 +12,6 @@ dependencies = [
   "geopy",
   "pandas",
   "certifi",
+  "tenacity",
+  "requests",
 ]

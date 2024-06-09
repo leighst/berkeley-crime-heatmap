@@ -1,49 +1,18 @@
 import os
 import pandas as pd
 from dagster import AssetExecutionContext, DailyPartitionsDefinition, asset
-from geopy.geocoders import Nominatim, ArcGIS
 import geopy
-import time
 import ssl
 import certifi
-import re
-from typing import Tuple
-import sqlite3
+from sqlalchemy import create_engine, Table, MetaData, text
+from sqlalchemy.dialects.sqlite import insert
+from . import resources
 
 incoming_data_dir = "data/incoming"
-start_date = "2024-01-01+0000"
-end_date = "2024-01-02+0000"
+start_date = "2019-01-01+0000"
+end_date = "2019-01-12+0000"
 
 partitions_def = DailyPartitionsDefinition(start_date=start_date, end_date=end_date)
-
-def get_location_for_address(address: str) -> Tuple[float, float]:
-  try:
-    # Connect to SQLite database
-    conn = sqlite3.connect('data/calls_for_service_enriched.db')
-    cursor = conn.cursor()
-
-    # Query to find latitude and longitude for the given address
-    cursor.execute('''
-      SELECT Latitude, Longitude FROM EnrichedCallsForService
-      WHERE Block_Address = ?
-    ''', (address,))
-
-    # Fetch the result
-    result = cursor.fetchone()
-
-    # Close the connection
-    conn.close()
-
-    if result:
-      # Return the latitude and longitude if found
-      return (result[0], result[1])
-    else:
-      # Return None if no matching address is found
-      return (None, None)
-  except Exception as e:
-    print(f"Error retrieving location for address {address}: {e}")
-    return (None, None)
-
 
 @asset(partitions_def=partitions_def)
 def raw_calls_for_service_data(context: AssetExecutionContext) -> pd.DataFrame:
@@ -66,7 +35,7 @@ def raw_calls_for_service_data(context: AssetExecutionContext) -> pd.DataFrame:
   return daily_data
 
 @asset(partitions_def=partitions_def)
-def geocoded_calls_for_service_data(raw_calls_for_service_data: pd.DataFrame) -> pd.DataFrame:
+def geocoded_calls_for_service_data(raw_calls_for_service_data: pd.DataFrame, geopy_client: resources.GeopyClient) -> pd.DataFrame:
   ctx = ssl.create_default_context(cafile=certifi.where())
   geopy.geocoders.options.default_ssl_context = ctx
   
@@ -74,41 +43,25 @@ def geocoded_calls_for_service_data(raw_calls_for_service_data: pd.DataFrame) ->
     return pd.DataFrame(columns=['Block_Address', 'Coordinates', 'Latitude', 'Longitude'])
 
   df = raw_calls_for_service_data
-  geolocator = ArcGIS()
-  # geolocator = Nominatim(user_agent="berk-crime-map")
-  
-  print(df)
-
-  def get_lat_long(address):
-    address = re.sub(r'\s+', ' ', address).strip()
-    try:
-      coordinates = get_location_for_address(address)
-      if coordinates is None:
-        # location = geolocator.geocode({'street': address, 'city': 'Berkeley', 'state': 'CA', 'country': 'USA'})
-        coordinates = geolocator.geocode(f"{address}, Berkeley, CA, USA")
-        print(coordinates)
-      else:
-        print(f"Using cached coordinates for {address}: {coordinates}")
-      return coordinates
-    except Exception as e:
-      print(f"Error geocoding block address {address}: {e}")
-      return (None, None)
-  
-  df['Coordinates'] = df['Block_Address'].apply(get_lat_long)
+  df['Coordinates'] = df['Block_Address'].apply(geopy_client.get_coords)
   df[['Latitude', 'Longitude']] = pd.DataFrame(df['Coordinates'].tolist(), index=df.index)
   df.drop(columns=['Coordinates'], inplace=True)
   return df
 
+
 @asset(partitions_def=partitions_def)
 def enriched_calls_for_service_data(geocoded_calls_for_service_data: pd.DataFrame) -> pd.DataFrame:
   # Connect to SQLite database
-  conn = sqlite3.connect('data/calls_for_service_enriched.db')
-  cursor = conn.cursor()
+  engine = create_engine('sqlite:///data/calls_for_service_enriched.db')
+  conn = engine.connect()
+
+  if 'CreateDatetime' in geocoded_calls_for_service_data.columns:
+    geocoded_calls_for_service_data['CreateDatetime'] = geocoded_calls_for_service_data['CreateDatetime'].astype(str)
 
   # Create table if it does not exist
-  cursor.execute('''
+  conn.execute(text('''
     CREATE TABLE IF NOT EXISTS EnrichedCallsForService (
-      Incident_Number TEXT,
+      Incident_Number TEXT PRIMARY KEY,
       CreateDatetime TEXT,
       Call_Type TEXT,
       Source TEXT,
@@ -123,14 +76,22 @@ def enriched_calls_for_service_data(geocoded_calls_for_service_data: pd.DataFram
       Latitude REAL,
       Longitude REAL
     )
-  ''')
+  '''))
 
   # Insert data into the table
-  geocoded_calls_for_service_data.to_sql('EnrichedCallsForService', conn, if_exists='replace', index=False)
+  metadata = MetaData()
+  metadata.bind = engine
+  table = Table('EnrichedCallsForService', metadata, autoload_with=engine)
+
+  stmt = insert(table).values(geocoded_calls_for_service_data.to_dict(orient='records'))
+  do_update_stmt = stmt.on_conflict_do_update(
+    index_elements=['Incident_Number'],
+    set_={c.name: c for c in stmt.excluded if c.name != 'Incident_Number'}
+  )
+  num_records_updated = conn.execute(do_update_stmt).rowcount
+  print(f"Number of records updated: {num_records_updated}")
 
   # Commit changes and close the connection
-  conn.commit();
-  conn.close();
-
+  conn.commit()
+  conn.close()
   return geocoded_calls_for_service_data;
-

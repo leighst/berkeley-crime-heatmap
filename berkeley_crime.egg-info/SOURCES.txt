@@ -4,6 +4,7 @@ setup.cfg
 setup.py
 berkeley_crime/__init__.py
 berkeley_crime/assets.py
+berkeley_crime/jobs.py
 berkeley_crime.egg-info/PKG-INFO
 berkeley_crime.egg-info/SOURCES.txt
 berkeley_crime.egg-info/dependency_links.txt

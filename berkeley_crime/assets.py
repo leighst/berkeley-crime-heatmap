@@ -10,7 +10,7 @@ from . import resources
 
 incoming_data_dir = "data/incoming"
 start_date = "2019-01-01+0000"
-end_date = "2019-01-12+0000"
+end_date = "2024-05-01+0000"
 
 partitions_def = DailyPartitionsDefinition(start_date=start_date, end_date=end_date)
 

@@ -1,36 +1,34 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Optional, Tuple
 import sqlite3
-from dagster._core.execution.context.init import InitResourceContext
-
 import requests
 from dagster import ConfigurableResource
 from dagster._utils.cached_method import cached_method
-
-from geopy.geocoders import Nominatim, ArcGIS
-from geopy.exc import GeopyError
-
-from typing import Tuple
+from geopy.geocoders import ArcGIS
+from geopy.exc import GeopyError, GeocoderTimedOut, GeocoderRateLimited, GeocoderUnavailable, GeocoderQuotaExceeded
 import tenacity
 import re
 
 # Custom retry condition to check for specific HTTP status codes
 def retry_on_http_status_code(exception):
+  print(exception)
   if isinstance(exception, GeopyHTTPError) and exception.status_code in {503, 429}:
     return True
   return False
 
 # Retry strategy
 retry_strategy = (
-    tenacity.retry_if_exception_type(TimeoutError) |
-    tenacity.retry_if_exception(retry_on_http_status_code)
+  tenacity.retry_if_exception_type(GeocoderRateLimited) |
+  tenacity.retry_if_exception_type(GeocoderTimedOut) |
+  tenacity.retry_if_exception_type(GeocoderQuotaExceeded) |
+  tenacity.retry_if_exception_type(GeocoderUnavailable)
 )
 
 # todo: use cached_method
 class GeopyClient(ConfigurableResource, ABC):
     @abstractmethod
     def get_coords(self, address: str) -> Optional[Any]:
-        pass
+      pass
 
 geolocator = ArcGIS()
 
@@ -52,7 +50,7 @@ class GeopyAPIClient(GeopyClient):
           print(f"Using new coordinates for {address}: {coordinates}")
         else:
           print(f"Using cached coordinates for {address}: {coordinates}")
-          return coordinates
+        return coordinates
       except Exception as e:
         print(f"Error geocoding block address {address}: {e}")
         raise e

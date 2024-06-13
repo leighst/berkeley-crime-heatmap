@@ -1,18 +1,19 @@
 import os
+import ssl
+
+import certifi
+import geopy
 import pandas as pd
 from dagster import AssetExecutionContext, DailyPartitionsDefinition, asset
-import geopy
-import ssl
-import certifi
-from sqlalchemy import create_engine, Table, MetaData, text
+from sqlalchemy import MetaData, Table, create_engine, text
 from sqlalchemy.dialects.sqlite import insert
+
 from . import resources
 
 incoming_data_dir = "data/incoming"
 start_date = "2019-01-01+0000"
-end_date = "2024-05-01+0000"
 
-partitions_def = DailyPartitionsDefinition(start_date=start_date, end_date=end_date)
+partitions_def = DailyPartitionsDefinition(start_date=start_date)
 
 @asset(partitions_def=partitions_def)
 def raw_calls_for_service_data(context: AssetExecutionContext) -> pd.DataFrame:

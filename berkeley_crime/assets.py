@@ -11,7 +11,7 @@ from sqlalchemy.dialects.sqlite import insert
 from . import resources
 
 incoming_data_dir = "data/incoming"
-start_date = "2019-01-01+0000"
+start_date = "2015-01-01+0000"
 
 partitions_def = DailyPartitionsDefinition(start_date=start_date)
 
@@ -27,8 +27,8 @@ def raw_calls_for_service_data(context: AssetExecutionContext) -> pd.DataFrame:
     if file.endswith('.csv'):
       data_path = os.path.join(incoming_data_dir, file)
       data = pd.read_csv(data_path)
-      # Convert 'CreateDatetime' to datetime and filter data to match the exact hour in partition_date_str
-      data['CreateDatetime'] = pd.to_datetime(data['CreateDatetime'])
+      data['CreateDatetime'] = data['CreateDatetime'].fillna(method='ffill')
+      data['CreateDatetime'] = pd.to_datetime(data['CreateDatetime'], utc=True)
       filtered_data = data[data['CreateDatetime'].dt.strftime('%Y-%m-%d') == partition_date_str]
       daily_data = pd.concat([daily_data, filtered_data], ignore_index=True)
     
